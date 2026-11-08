@@ -19,49 +19,20 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# 4. Users Tablosu Modeli (id, email, password_hash)
+# 4. Users Tablosu Modeli (id, email, password_hash, role, full_name, current_level, streak_days, xp_points, avatar_seed)
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    # Gerçek veritabanı sütunu: öğrenci veya öğretmen rolü
+    # Gerçek veritabanı sütunları
     role = Column(String(50), nullable=False, default='student', server_default='student')
-
-    # Class-level defaults (sütun olmayan ek alanlar için)
-    full_name = "Kullanıcı"
-    current_level = "A1"
-    streak_days = 1
-    xp_points = 120
-    avatar_seed = "Felix"
-    created_at = None
-
-    def __init__(self, **kwargs):
-        self.full_name = kwargs.get('full_name') or (kwargs.get('email', '').split('@')[0].capitalize() if kwargs.get('email') else "Kullanıcı")
-        self.role = kwargs.get('role', 'student')
-        self.current_level = kwargs.get('current_level', 'A1')
-        self.streak_days = kwargs.get('streak_days', 1)
-        self.xp_points = kwargs.get('xp_points', 120)
-        self.avatar_seed = kwargs.get('avatar_seed', 'Felix')
-        self.created_at = kwargs.get('created_at', None)
-
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-
-    @reconstructor
-    def init_on_load(self):
-        """SQLAlchemy bir kaydı DB'den çektiğinde çalışır; sütun olmayan alanları doldurur."""
-        if not getattr(self, 'full_name', None):
-            self.full_name = self.email.split('@')[0].capitalize() if self.email else "Kullanıcı"
-        if not getattr(self, 'current_level', None):
-            self.current_level = "A1"
-        if not getattr(self, 'streak_days', None):
-            self.streak_days = 1
-        if not getattr(self, 'xp_points', None):
-            self.xp_points = 120
-        if not getattr(self, 'avatar_seed', None):
-            self.avatar_seed = "Felix"
+    full_name = Column(String(255), nullable=False, default='Öğrenci', server_default='Öğrenci')
+    current_level = Column(String(10), nullable=False, default='A1', server_default='A1')
+    streak_days = Column(Integer, nullable=False, default=1, server_default='1')
+    xp_points = Column(Integer, nullable=False, default=120, server_default='120')
+    avatar_seed = Column(String(50), nullable=False, default='Felix', server_default='Felix')
 
     # Geriye dönük uyumluluk için hashed_password getter ve setter
     @property
@@ -73,7 +44,7 @@ class User(Base):
         self.password_hash = value
 
     def __repr__(self):
-        return f"<User id={self.id} email='{self.email}'>"
+        return f"<User id={self.id} email='{self.email}' full_name='{self.full_name}' role='{self.role}'>"
 
 # 5. bcrypt ile Güvenli Şifreleme Fonksiyonları
 def hash_password(password: str) -> str:
@@ -99,11 +70,34 @@ def migrate_db():
     with engine.connect() as conn:
         result = conn.execute(sqlalchemy.text("PRAGMA table_info(users)"))
         columns = [row[1] for row in result.fetchall()]
-        if 'role' not in columns:
-            conn.execute(sqlalchemy.text(
-                "ALTER TABLE users ADD COLUMN role VARCHAR(50) NOT NULL DEFAULT 'student'"
-            ))
-            conn.commit()
+        
+        column_defs = {
+            'role': "ALTER TABLE users ADD COLUMN role VARCHAR(50) NOT NULL DEFAULT 'student'",
+            'full_name': "ALTER TABLE users ADD COLUMN full_name VARCHAR(255) NOT NULL DEFAULT 'Öğrenci'",
+            'current_level': "ALTER TABLE users ADD COLUMN current_level VARCHAR(10) NOT NULL DEFAULT 'A1'",
+            'streak_days': "ALTER TABLE users ADD COLUMN streak_days INTEGER NOT NULL DEFAULT 1",
+            'xp_points': "ALTER TABLE users ADD COLUMN xp_points INTEGER NOT NULL DEFAULT 120",
+            'avatar_seed': "ALTER TABLE users ADD COLUMN avatar_seed VARCHAR(50) NOT NULL DEFAULT 'Felix'",
+        }
+
+        for col_name, sql in column_defs.items():
+            if col_name not in columns:
+                conn.execute(sqlalchemy.text(sql))
+
+        # Demo ve kurucu hesaplarının verilerini zenginleştir
+        conn.execute(sqlalchemy.text("""
+            UPDATE users SET full_name = 'Can Demir', current_level = 'B1', streak_days = 5, xp_points = 840, avatar_seed = 'Can'
+            WHERE email = 'ogrenci@derintalks.com' AND (full_name = 'Öğrenci' OR full_name IS NULL)
+        """))
+        conn.execute(sqlalchemy.text("""
+            UPDATE users SET full_name = 'Ayşe Kaya (Eğitmen)', current_level = 'C2', streak_days = 18, xp_points = 2400, avatar_seed = 'Ayse', role = 'teacher'
+            WHERE email = 'ogretmen@derintalks.com' AND (full_name = 'Öğrenci' OR full_name IS NULL)
+        """))
+        conn.execute(sqlalchemy.text("""
+            UPDATE users SET full_name = 'Derin Karakaya', role = 'admin', current_level = 'C2', xp_points = 4850, streak_days = 24
+            WHERE email IN ('darelderin@gmail.com', 'proscale@gmail.com')
+        """))
+        conn.commit()
 
 def init_db():
     """SQLite veritabanı dosyasını ve users tablosunu oluşturur; gerekli migrasyonları çalıştırır."""

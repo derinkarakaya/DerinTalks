@@ -74,6 +74,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const setAuthSession = (newToken, newUser) => {
+    setToken(newToken);
+    setUser(newUser);
+    if (newToken) setStoredToken(newToken);
+    if (newUser) setStoredUser(newUser);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -83,6 +90,8 @@ export const AuthProvider = ({ children }) => {
         loading,
         login: handleLogin,
         register: handleRegister,
+        setAuthSession,
+        forgotPassword: api.forgotPassword,
         demoLogin: handleDemoLogin,
         logout: handleLogout,
         refreshUser,

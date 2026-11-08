@@ -1,4 +1,7 @@
-const BASE_URL = '/api';
+// Çevre değişkenini kontrol et, eğer lokaldeysek 8000'e git, sunucudaysak Render adresini kullan.
+// (Vite projelerinde genellikle import.meta.env kullanılır)
+const isDevelopment = import.meta.env?.MODE === 'development' || process?.env?.NODE_ENV === 'development';
+const BASE_URL = isDevelopment ? 'http://localhost:8000/api' : 'https://derintalks.onrender.com/api';
 
 export const getStoredToken = () => localStorage.getItem('derintalks_token');
 export const setStoredToken = (token) => localStorage.setItem('derintalks_token', token);
@@ -39,46 +42,29 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
-  // Auth (Direct /login & /register with /api fallback)
+  // Auth: POST /auth/login & POST /auth/register 
+  // (Fetch içindeki URL'ler BASE_URL kullanacak şekilde düzeltildi)
   login: async (email, password) => {
-    try {
-      const res = await fetch('/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.detail || 'E-posta veya şifre hatalı.');
-      }
-      return data;
-    } catch (err) {
-      if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('404'))) {
-        return request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-      }
-      throw err;
-    }
+    return request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    });
   },
+
   register: async (payload) => {
-    try {
-      const res = await fetch('/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.detail || 'Kayıt işlemi başarısız.');
-      }
-      return data;
-    } catch (err) {
-      if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('404'))) {
-        return request('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
-      }
-      throw err;
-    }
+    return request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
   },
-  demoLogin: (role) => request(`/auth/demo/${role}`, { method: 'POST' }),
+
+  forgotPassword: async (email) => {
+    return request('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+  },
+
   getMe: () => request('/auth/me'),
 
   // Curriculum

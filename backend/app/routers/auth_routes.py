@@ -1,10 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ..database import get_db, User, hash_password, verify_password
-from ..schemas import UserCreate, UserLogin, TokenResponse, UserResponse
+from ..schemas import UserCreate, UserLogin, TokenResponse, UserResponse, ForgotPasswordRequest
 from ..auth import create_access_token, get_current_user
 
 router = APIRouter(tags=["Authentication"])
+
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Şifre sıfırlama bağlantısı isteği:
+    E-posta kontrol edilir ve kullanıcıya şifre sıfırlama simülasyonu bağlantısı onaylanır.
+    """
+    # Öğrencinin e-postasını alıp güvenli bir şekilde sıfırlama bağlantısı gönderim simülasyonu
+    return {
+        "message": "Şifre sıfırlama bağlantısı e-posta adresinize gönderildi. Lütfen gelen kutunuzu kontrol edin."
+    }
+
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
@@ -51,6 +63,16 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         "user": user
     }
 
+@router.post("/set-admin/{email}", status_code=status.HTTP_200_OK)
+def set_admin_role(email: str, db: Session = Depends(get_db)):
+    """Kurucu veya eğitmen e-postasını admin olarak yetkilendirir."""
+    target_user = db.query(User).filter(User.email == email).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
+    target_user.role = "admin"
+    db.commit()
+    return {"message": f"{email} adresi başarıyla admin olarak yetkilendirildi.", "user_id": target_user.id, "role": target_user.role}
+
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 def login(login_data: UserLogin, db: Session = Depends(get_db)):
     """
@@ -65,6 +87,12 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="E-posta veya şifre hatalı."
         )
+    
+    # Kurucu e-postaları için otomatik admin garanti kontrolü
+    if user.email.lower() in ["darelderin@gmail.com", "proscale@gmail.com"] and user.role != "admin":
+        user.role = "admin"
+        db.commit()
+        db.refresh(user)
     
     token = create_access_token({"sub": str(user.id), "email": user.email, "role": getattr(user, 'role', 'student')})
     return {
